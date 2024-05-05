@@ -1,35 +1,88 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+import { useState, useEffect, useRef } from "react";
+import CardComponent from "./components/Card";
+import FilterComponent from "./components/Filter";
+
+export default function App(props) {
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(null);
+  const limit = 10;
+  const observerTarget = useRef(null);
+  const isFetchingRef = useRef(false);
+
+  const fetchData = async () => {
+    if (isFetchingRef.current) return;
+    setError(null);
+    try {
+      isFetchingRef.current = true;
+      const myHeaders = new Headers();
+      myHeaders.append("Content-Type", "application/json");
+
+      const body = JSON.stringify({
+        limit,
+        offset: page * limit,
+      });
+
+      const requestOptions = {
+        method: "POST",
+        headers: myHeaders,
+        body,
+      };
+      const response = await fetch(
+        "https://api.weekday.technology/adhoc/getSampleJdJSON",
+        requestOptions
+      );
+      const data = await response.json();
+
+      setTotalCount(data.totalCount);
+      setItems((prevItems) => [...prevItems, ...data.jdList]);
+      setPage((prevPage) => prevPage + 1);
+    } catch (error) {
+      setError(error);
+    } finally {
+      isFetchingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (items.length < totalCount || totalCount === null) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            fetchData();
+          }
+        },
+        { threshold: 0.1 }
+      );
+
+      if (observerTarget.current) {
+        observer.observe(observerTarget.current);
+      }
+
+      return () => {
+        if (observerTarget.current) {
+          observer.unobserve(observerTarget.current);
+        }
+      };
+    }
+  }, [observerTarget, items, totalCount]);
 
   return (
     <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <FilterComponent></FilterComponent>
+      <div className="items-container">
+        {items.map((item, index) => (
+          // <div className="row">
+          <CardComponent key={item.jdUid + "-" + index} data={item} />
+          // </div>
+        ))}
+        {isFetchingRef.current && <p>Loading...</p>}
+        {error && <p>Error: {error.message}</p>}
+        <div ref={observerTarget}></div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
     </>
-  )
+  );
 }
-
-export default App
